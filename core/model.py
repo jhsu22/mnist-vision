@@ -23,8 +23,6 @@ class BaseModel(nn.Module):
         # Use a dummy tensor to calculate sizes dynamically
         x = torch.zeros(input_shape)
 
-        needs_flatten = False
-
         for i, config in enumerate(layer_configs):
             layer_type = config["type"]
             layer_params = config.get("params", {})
@@ -36,12 +34,10 @@ class BaseModel(nn.Module):
 
                 x = flatten(x)
 
-                needs_flatten = False
-
             # Build the layer with auto-calculated sizes
             if layer_type == "Linear":
                 # Auto-calculate input size from current tensor shape
-                in_features = x.shape[1]  # After flatten, shape is (batch, features)
+                in_features = x.shape[1]
                 out_features = layer_params.get("output_size", 64)
 
                 layer = nn.Linear(in_features, out_features)
@@ -50,13 +46,15 @@ class BaseModel(nn.Module):
 
             elif layer_type == "Conv2D":
                 # Auto-calculate input channels from current tensor
-                in_channels = x.shape[1]  # Shape is (batch, channels, H, W)
+                in_channels = x.shape[1]
                 out_channels = layer_params.get("out_channels", 32)
                 kernel_size = layer_params.get("kernel_size", 3)
                 stride = layer_params.get("stride", 1)
                 padding = layer_params.get("padding", 0)
 
-                layer = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+                layer = nn.Conv2d(
+                    in_channels, out_channels, kernel_size, stride, padding
+                )
                 self.layers.append(layer)
                 x = layer(x)
 
@@ -83,6 +81,20 @@ class BaseModel(nn.Module):
                 self.layers.append(activation)
                 x = activation(x)
 
+        # Flatten if needed at end
+        if len(x.shape) > 2:
+            flatten = nn.Flatten()
+            self.layers.append(flatten)
+            x = flatten(x)
+
+        # Add final output layer with output size of 10
+        final_features = x.shape[1]
+
+        if final_features != 10:
+            output_layer = nn.Linear(final_features, 10)
+            self.layers.append(output_layer)
+            x = output_layer(x)
+
         # Store the final output shape for reference
         self.output_shape = x.shape
 
@@ -94,17 +106,13 @@ class BaseModel(nn.Module):
             "Tanh": nn.Tanh(),
             "relu": nn.ReLU(),
             "sigmoid": nn.Sigmoid(),
-            "tanh": nn.Tanh()
+            "tanh": nn.Tanh(),
         }
         return activations.get(name, nn.ReLU())
 
     def get_optimizer(self, name, learning_rate):
         """Get optimizer from layer config"""
-        optimizers = {
-            "Adam": optim.Adam,
-            "SGD": optim.SGD,
-            "RMSprop": optim.RMSprop
-        }
+        optimizers = {"Adam": optim.Adam, "SGD": optim.SGD, "RMSprop": optim.RMSprop}
         optimizer_class = optimizers.get(name, optim.Adam)
         return optimizer_class(self.parameters(), lr=learning_rate)
 
@@ -120,7 +128,10 @@ class BaseModel(nn.Module):
         x = torch.zeros(1, 1, 28, 28)
         for i, layer in enumerate(self.layers):
             x = layer(x)
-            print(f"{i+1}. {layer.__class__.__name__:20} -> Output shape: {list(x.shape)}")
+            layer_name = layer.__class__.__name__
+            if isinstance(layer, nn.Linear) and layer.out_features == 10:
+                layer_name += " (output)"  # Mark the output layer
+            print(f"{i + 1}. {layer_name:20} -> Output shape: {list(x.shape)}")
         print("-" * 60)
 
 
