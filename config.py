@@ -19,7 +19,7 @@ class App:
     GEOMETRY = "1200x800"
     MODEL_LIST = ["Nanook", "Fuli", "Ena", "Akivili"]
     OPTIMIZER_LIST = ["Adam", "SGD", "RMSprop"]
-    LAYER_LIST = ["Linear", "Conv2D", "MaxPooling2D"]
+    LAYER_LIST = ["Linear", "Conv2D", "MaxPooling2D", "Flatten"]
 
     FONT_TITLE = None
     FONT_REGULAR = None
@@ -38,32 +38,45 @@ class Layers:
     }
 
     LINEAR = {
-        "input_size": {"type": "int", "default": 784, "label": "Input Size"},
         "output_size": {"type": "int", "default": 64, "label": "Output Size"},
-        "activation": {"type": "dropdown", "default": "relu",
-            "options": ["ReLU", "Sigmoid", "Tanh"],
-            "label": "Activation"}
+        "activation": {
+            "type": "dropdown",
+            "default": "ReLU",
+            "options": ["ReLU", "Sigmoid", "Tanh", "None"],
+            "label": "Activation"
+        }
     }
 
     CONV2D = {
-        "in_channels": {"type": "int", "default": 1, "label": "Input Channels"},
         "out_channels": {"type": "int", "default": 32, "label": "Output Channels"},
         "kernel_size": {"type": "int", "default": 3, "label": "Kernel Size"},
         "stride": {"type": "int", "default": 1, "label": "Stride"},
-        "padding": {"type": "int", "default": 0, "label": "Padding"}
+        "padding": {"type": "int", "default": 0, "label": "Padding"},
+        "activation": {
+            "type": "dropdown",
+            "default": "ReLU",
+            "options": ["ReLU", "Sigmoid", "Tanh", "None"],
+            "label": "Activation"
+        }
     }
 
     MAXPOOLING2D = {
         "kernel_size": {"type": "int", "default": 2, "label": "Kernel Size"},
-        "strides": {"type": "int", "default": 2, "label": "Stride"}
+        "stride": {"type": "int", "default": 2, "label": "Stride"},
+        "padding": {"type": "int", "default": 0, "label": "Padding"}
     }
+
+    FLATTEN = {}  # Flatten has no parameters
+
 
 # Map layer parameters
 LAYER_PARAMS = {
     "Linear": Layers.LINEAR,
     "Conv2D": Layers.CONV2D,
-    "MaxPooling2D": Layers.MAXPOOLING2D
- }
+    "MaxPooling2D": Layers.MAXPOOLING2D,
+    "Flatten": Layers.FLATTEN
+}
+
 
 def initialize_fonts():
     """Initializes the application fonts"""

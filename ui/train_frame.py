@@ -1,10 +1,8 @@
 import customtkinter as ctk
 import threading
 
-from torch._inductor.config import batch_fusion
-
 from config import LAYER_PARAMS, App
-from core.model import BaseModel
+from core.model import BaseModel, get_layer_output_shapes
 
 import torch
 import torch.nn as nn
@@ -53,12 +51,11 @@ class TrainFrame(ctk.CTkFrame):
         # Extract default values
         default_params = {}
         for param_name, param_info in param_template.items():
-            default_value = param_info[
-                "default"
-            ]  # Get default value from parameter info
-            default_params[param_name] = (
-                default_value  # Add it to default parameter dictionary
-            )
+            default_value = param_info["default"]
+            # Skip "None" activation
+            if param_name == "activation" and default_value == "None":
+                continue
+            default_params[param_name] = default_value
 
         # Create layer dictionary
         new_layer = {"type": layer_type, "params": default_params}
@@ -76,19 +73,46 @@ class TrainFrame(ctk.CTkFrame):
         for item in self.layer_list_frame.winfo_children():
             item.destroy()
 
+        # Get calculated shapes for all layers
+        try:
+            shapes = get_layer_output_shapes(self.layers)
+        except Exception as e:
+            shapes = []
+
         # Refresh layer list
+        shape_idx = 0
         for index, layer in enumerate(self.layers):
             # Create a frame for the layer
             layer_item = ctk.CTkFrame(self.layer_list_frame)
             layer_item.grid(row=index, column=0, padx=5, pady=5, sticky="ew")
             layer_item.layer_index = index
 
-            # Create a label for layer info
+            # Create label text with layer info
             layer_type = layer["type"]
-            label_text = f"{index + 1}. {layer_type}"
 
-            layer_label = ctk.CTkLabel(layer_item, text=label_text)
-            layer_label.pack(side="left", padx=10, pady=5)
+            # Find the corresponding shape info
+            shape_text = ""
+            if shape_idx < len(shapes):
+                # Skip auto-inserted flatten in shape display
+                while shape_idx < len(shapes) and "auto" in shapes[shape_idx][0].lower():
+                    shape_idx += 1
+
+                if shape_idx < len(shapes):
+                    layer_desc, shape = shapes[shape_idx]
+                    if len(shape) == 2:
+                        shape_text = f" → {shape[1]} features"
+                    elif len(shape) == 4:
+                        shape_text = f" → {shape[1]}ch × {shape[2]}×{shape[3]}"
+                    shape_idx += 1
+
+                    # Skip activation shapes
+                    while shape_idx < len(shapes) and shapes[shape_idx][0].startswith("  └─"):
+                        shape_idx += 1
+
+            label_text = f"{index + 1}. {layer_type}{shape_text}"
+
+            layer_label = ctk.CTkLabel(layer_item, text=label_text, anchor="w")
+            layer_label.pack(side="left", padx=10, pady=5, fill="x", expand=True)
 
             layer_item.bind(
                 "<Button-1>", lambda event, index=index: self._select_layer(index)
@@ -115,7 +139,7 @@ class TrainFrame(ctk.CTkFrame):
         for widget in self.param_panel.winfo_children():
             widget.destroy()
 
-        if index == None:
+        if index is None:
             # Show message when no layer is selected
             msg = ctk.CTkLabel(self.param_panel, text="Select a layer to edit")
             msg.pack(pady=20)
@@ -126,11 +150,25 @@ class TrainFrame(ctk.CTkFrame):
 
             param_template = LAYER_PARAMS[layer_type]
 
-            row_number = 0
+            # Show layer type header
+            header = ctk.CTkLabel(
+                self.param_panel,
+                text=f"{layer_type} Layer",
+                font=ctk.CTkFont(size=16, weight="bold")
+            )
+            header.grid(row=0, column=0, columnspan=2, padx=5, pady=(10, 20), sticky="w")
+
+            if not param_template:
+                # No parameters for this layer type (e.g., Flatten)
+                msg = ctk.CTkLabel(self.param_panel, text="No configurable parameters")
+                msg.grid(row=1, column=0, columnspan=2, padx=5, pady=10)
+                return
+
+            row_number = 1
 
             for param_name, param_info in param_template.items():
-                # Get current value from the layer
-                param_value = current_layer["params"][param_name]
+                # Get current value from the layer (use default if not set)
+                param_value = current_layer["params"].get(param_name, param_info["default"])
 
                 # Create label
                 param_label = ctk.CTkLabel(self.param_panel, text=param_info["label"])
@@ -145,16 +183,19 @@ class TrainFrame(ctk.CTkFrame):
 
                     param_entry.bind(
                         "<Return>",
-                        lambda event, param_name=param_name: self._update_param(
-                            param_name, event.widget.get()
-                        ),
+                        lambda event, pn=param_name: self._update_param(pn, event.widget.get()),
+                    )
+                    # Also update on focus out
+                    param_entry.bind(
+                        "<FocusOut>",
+                        lambda event, pn=param_name: self._update_param(pn, event.widget.get()),
                     )
 
                 elif param_info["type"] == "dropdown":
                     param_combo = ctk.CTkComboBox(
                         self.param_panel, values=param_info["options"]
                     )
-                    param_combo.set(param_value)
+                    param_combo.set(param_value if param_value else param_info["options"][0])
                     param_combo.grid(
                         row=row_number, column=1, padx=5, pady=10, sticky="ew"
                     )
@@ -166,15 +207,33 @@ class TrainFrame(ctk.CTkFrame):
                 row_number += 1
 
     def _update_param(self, param_name, new_value):
-        current_layer = self.layers[self.selected_layer_index]
+        if self.selected_layer_index is None:
+            return
 
+        current_layer = self.layers[self.selected_layer_index]
         layer_type = current_layer["type"]
-        param_info = LAYER_PARAMS[layer_type][param_name]
+        param_info = LAYER_PARAMS[layer_type].get(param_name)
+
+        if param_info is None:
+            return
 
         if param_info["type"] == "int":
-            new_value = int(new_value)
+            try:
+                new_value = int(new_value)
+            except ValueError:
+                return  # Invalid input, ignore
 
-        current_layer["params"][param_name] = new_value
+        # Handle "None" activation
+        if param_name == "activation" and new_value == "None":
+            if "activation" in current_layer["params"]:
+                del current_layer["params"]["activation"]
+        else:
+            current_layer["params"][param_name] = new_value
+
+        # Refresh layer list to update shape calculations
+        self._refresh_layer_list()
+        # Re-highlight selected layer
+        self._select_layer(self.selected_layer_index)
 
     def setup_model_selection(self):
         self.model_selection_frame = ctk.CTkFrame(self)
@@ -272,27 +331,27 @@ class TrainFrame(ctk.CTkFrame):
 
         self.current_row += 1
 
-        self.button_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.button_frame.grid(
+        self.layer_button_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.layer_button_frame.grid(
             row=self.current_row, column=0, columnspan=1, padx=10, pady=0, sticky="ew"
         )
 
         self.delete_button = ctk.CTkButton(
-            self.button_frame,
+            self.layer_button_frame,
             text="Delete Layer",
             command=self._delete_layer,
         )
         self.delete_button.pack(side="right", padx=5)
 
         self.moveup_button = ctk.CTkButton(
-            self.button_frame,
+            self.layer_button_frame,
             text="Move Up",
             command=self._move_up,
         )
         self.moveup_button.pack(side="right", padx=5)
 
         self.movedown_button = ctk.CTkButton(
-            self.button_frame,
+            self.layer_button_frame,
             text="Move Down",
             command=self._move_down,
         )
@@ -342,7 +401,7 @@ class TrainFrame(ctk.CTkFrame):
         self.learning_rate_label.grid(row=0, column=0, padx=0, pady=10, sticky="w")
 
         self.learning_rate_entry = ctk.CTkEntry(
-            self.hyperparameters_frame, placeholder_text="0.01"
+            self.hyperparameters_frame, placeholder_text="0.001"
         )
         self.learning_rate_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
 
@@ -352,7 +411,7 @@ class TrainFrame(ctk.CTkFrame):
         self.epochs_label.grid(row=1, column=0, padx=0, pady=10, sticky="w")
 
         self.epochs_entry = ctk.CTkEntry(
-            self.hyperparameters_frame, placeholder_text="100"
+            self.hyperparameters_frame, placeholder_text="10"
         )
         self.epochs_entry.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
 
@@ -393,7 +452,7 @@ class TrainFrame(ctk.CTkFrame):
             "optimizer": self.optimizer_entry.get() or "Adam"
         }
 
-        # Create model
+        # Create model with auto-calculated sizes
         model = BaseModel(self.layers)
 
         # Create optimizer
@@ -401,64 +460,101 @@ class TrainFrame(ctk.CTkFrame):
 
         return model, optimizer, hyperparams
 
+    def _update_display(self, widget, text):
+        """Helper method to update textbox displays from any thread"""
+        def update():
+            widget.delete("1.0", "end")
+            widget.insert("1.0", text)
+        # Schedule the update on the main thread
+        self.after(0, update)
+
     def _start_training(self):
         """Run training loop in a separate thread"""
+        if not self.layers:
+            self._update_display(self.loss_display, "Error: Add layers first!")
+            return
+
+        # Clear display areas before starting
+        self.epochs_display.delete("1.0", "end")
+        self.loss_display.delete("1.0", "end")
+        self.accuracy_display.delete("1.0", "end")
+
         training_thread = threading.Thread(target=self._training_loop)
+        training_thread.daemon = True
         training_thread.start()
 
     def _training_loop(self):
         """Training loop for ML model"""
-        # Build model
-        model, optimizer, hyperparams = self._build_model()
+        try:
+            # Build model
+            model, optimizer, hyperparams = self._build_model()
 
-        # Set device (use GPU if available)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
+            # Print model summary
+            print("\n" + "="*60)
+            model.summary()
+            print("="*60 + "\n")
 
-        # Load data
-        train_loader = self._get_data_loader(hyperparams["batch_size"])
+            # Set device (use GPU if available)
+            device = torch.device("cpu")
+            model.to(device)
 
-        # Loss function
-        criterion = nn.CrossEntropyLoss()
+            # Load data
+            train_loader = self._get_data_loader(hyperparams["batch_size"])
 
-        self.training_status = True
+            # Loss function
+            criterion = nn.CrossEntropyLoss()
 
-        # Training loop
-        for epoch in range(hyperparams["epochs"]):
-            model.train()
-            total_loss = 0
-            correct = 0
-            total = 0
+            self.training_status = True
 
-            for batch_x, batch_y in train_loader:
+            # Training loop
+            for epoch in range(hyperparams["epochs"]):
                 if not self.training_status:
                     break
 
-                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+                model.train()
+                total_loss = 0
+                correct = 0
+                total = 0
 
-                # Forward pass
-                outputs = model(batch_x)
-                loss = criterion(outputs, batch_y)
+                for batch_x, batch_y in train_loader:
+                    if not self.training_status:
+                        break
 
-                # Backward pass and optimization
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                    batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
-                # Track training metrics
-                total_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
-                total += batch_y.size(0)
-                correct += (predicted == batch_y).sum().item()
+                    # Forward pass
+                    outputs = model(batch_x)
+                    loss = criterion(outputs, batch_y)
 
-            self.current_epoch = epoch + 1
-            self.epochs_entry.insert("end", f"Epoch {self.current_epoch}")
-            self.current_loss = total_loss / len(train_loader)
-            self.loss_entry.insert("end", f"Loss: {self.current_loss:.4f}")
-            self.current_accuracy = 100 * correct / total
-            self.accuracy_entry.insert("end", f"Accuracy: {self.current_accuracy:.2f}%")
+                    # Backward pass and optimization
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
 
-        self.training_status = False
+                    # Track training metrics
+                    total_loss += loss.item()
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += batch_y.size(0)
+                    correct += (predicted == batch_y).sum().item()
+
+                # Update metrics after each epoch
+                self.current_epoch = epoch + 1
+                self.current_loss = total_loss / len(train_loader)
+                self.current_accuracy = 100 * correct / total
+
+                # Update display using thread-safe method
+                self._update_display(self.epochs_display, f"Epoch: {self.current_epoch}/{hyperparams['epochs']}")
+                self._update_display(self.loss_display, f"Loss: {self.current_loss:.4f}")
+                self._update_display(self.accuracy_display, f"Accuracy: {self.current_accuracy:.2f}%")
+
+            self.training_status = False
+
+        except Exception as e:
+            import traceback
+            error_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self._update_display(self.loss_display, f"Error: {str(e)}")
+            self.training_status = False
 
     def _get_data_loader(self, batch_size):
         """Get training data"""
@@ -467,10 +563,10 @@ class TrainFrame(ctk.CTkFrame):
         from torch.utils.data import DataLoader
 
         transform = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),        # Ensure single channel
-            transforms.Resize((28, 28)),                        # Resize to 28x28
+            transforms.Grayscale(num_output_channels=1),
+            transforms.Resize((28, 28)),
             transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))          # Normalize zero mean and std deviation
+            transforms.Normalize((0.1307,), (0.3081,))
         ])
 
         train_dataset = ImageFolder(
@@ -512,7 +608,6 @@ class TrainFrame(ctk.CTkFrame):
 
         return test_loader
 
-
     def _stop_training(self):
         self.training_status = False
 
@@ -525,27 +620,27 @@ class TrainFrame(ctk.CTkFrame):
         self.plot_label = ctk.CTkLabel(self.plot_frame, text="Model Performance")
         self.plot_label.grid(row=0, column=0, padx=10, pady=10)
 
-        self.epochs_entry = ctk.CTkTextbox(self.plot_frame)
-        self.epochs_entry.grid(row=1, column=0, padx=10, pady=10)
+        self.epochs_display = ctk.CTkTextbox(self.plot_frame, height=50)
+        self.epochs_display.grid(row=1, column=0, padx=10, pady=10)
 
-        self.loss_entry = ctk.CTkTextbox(self.plot_frame)
-        self.loss_entry.grid(row=2, column=0, padx=10, pady=10)
+        self.loss_display = ctk.CTkTextbox(self.plot_frame, height=50)
+        self.loss_display.grid(row=2, column=0, padx=10, pady=10)
 
-        self.accuracy_entry = ctk.CTkTextbox(self.plot_frame)
-        self.accuracy_entry.grid(row=3, column=0, padx=10, pady=10)
+        self.accuracy_display = ctk.CTkTextbox(self.plot_frame, height=50)
+        self.accuracy_display.grid(row=3, column=0, padx=10, pady=10)
 
     def setup_bottom_buttons(self):
-        self.button_frame = ctk.CTkFrame(self)
-        self.button_frame.grid(
+        self.bottom_button_frame = ctk.CTkFrame(self)
+        self.bottom_button_frame.grid(
             row=self.current_row, column=0, columnspan=5, padx=10, pady=10, sticky="we"
         )
 
-        self.button_frame.grid_columnconfigure(0, weight=1)
+        self.bottom_button_frame.grid_columnconfigure(0, weight=1)
 
         self.current_row += 1
 
-        self.train_button = ctk.CTkButton(self.button_frame, text="Train Model", command=self._start_training)
+        self.train_button = ctk.CTkButton(self.bottom_button_frame, text="Train Model", command=self._start_training)
         self.train_button.pack(side="right", padx=10)
 
-        self.stop_button = ctk.CTkButton(self.button_frame, text="Stop Training", command=self._stop_training)
+        self.stop_button = ctk.CTkButton(self.bottom_button_frame, text="Stop Training", command=self._stop_training)
         self.stop_button.pack(side="right", padx=10)
