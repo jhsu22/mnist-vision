@@ -3,6 +3,11 @@ import threading
 
 from CTkMessagebox import CTkMessagebox
 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from pandas._libs.algos import pad
+
 from config import LAYER_PARAMS, App, Paths
 from core.model import BaseModel, get_layer_output_shapes
 import os
@@ -34,6 +39,11 @@ class TrainFrame(ctk.CTkFrame):
         self.current_model_name = None      # Name of the current model
         self.last_saved_layers = None       # For resetting
 
+        # Initialize plot tracking variables
+        self.loss_history = []
+        self.accuracy_history = []
+        self.epoch_history = []
+
         # Create models directory
         os.makedirs(Paths.SAVED_MODELS_DIR, exist_ok=True)
 
@@ -51,6 +61,8 @@ class TrainFrame(ctk.CTkFrame):
 
         # Create bottom buttons
         self.setup_bottom_buttons()
+
+        self._refresh_model_list()
 
     def _get_toplevel(self):
         return self.winfo_toplevel()
@@ -109,11 +121,6 @@ class TrainFrame(ctk.CTkFrame):
         self._refresh_layer_list()
         self._display_layer_params(None)
 
-        # Clear training displays
-        self.epochs_display.delete("1.0", "end")
-        self.loss_display.delete("1.0", "end")
-        self.accuracy_display.delete("1.0", "end")
-
         # Clear hyperparameter entries
         self.learning_rate_entry.delete(0, "end")
         self.epochs_entry.delete(0, "end")
@@ -122,6 +129,12 @@ class TrainFrame(ctk.CTkFrame):
 
         # Update model selector
         self.model_selection.set("")
+
+        # Clear plot history
+        self.loss_history = []
+        self.accuracy_history = []
+        self.epoch_history = []
+        self._update_plots()
 
     def _save_model(self):
         """Save current model to .pth file"""
@@ -179,7 +192,10 @@ class TrainFrame(ctk.CTkFrame):
                 'epochs': self.epochs_entry.get() or "10",
                 'batch_size': self.batch_size_entry.get() or "32",
                 'optimizer': self.optimizer_entry.get() or "Adam"
-            }
+            },
+            'loss_history': self.loss_history or [],
+            'accuracy_history': self.accuracy_history or [],
+            'epoch_history': self.epoch_history or []
         }
 
         if self.current_model is not None:
@@ -259,10 +275,11 @@ class TrainFrame(ctk.CTkFrame):
         self._refresh_layer_list()
         self._display_layer_params(None)
 
-        # Clear training displays (temp until graphs)
-        self.epochs_display.delete("1.0", "end")
-        self.loss_display.delete("1.0", "end")
-        self.accuracy_display.delete("1.0", "end")
+        # Clear plot history
+        self.loss_history = save_data.get('loss_history', [])
+        self.accuracy_history = save_data.get('accuracy_history', [])
+        self.epoch_history = save_data.get('epoch_history', [])
+        self._update_plots()
 
         _ = CTkMessagebox(
             master=self,
@@ -286,9 +303,7 @@ class TrainFrame(ctk.CTkFrame):
                 self.selected_layer_index = None
                 self._refresh_layer_list()
                 self._display_layer_params(None)
-                self.epochs_display.delete("1.0", "end")
-                self.loss_display.delete("1.0", "end")
-                self.accuracy_display.delete("1.0", "end")
+
         else:
             msg = CTkMessagebox(
                 master=self,
@@ -528,6 +543,9 @@ class TrainFrame(ctk.CTkFrame):
         self.reset_button = ctk.CTkButton(self.model_buttons_frame, text="Reset Model", command=self._reset_model)
         self.reset_button.grid(row=0, column=2, padx=5, pady=(5, 0), sticky="w")
 
+        self.load_button = ctk.CTkButton(self.model_buttons_frame, text="Load Model", command=self._load_model)
+        self.load_button.grid(row=0, column=3, padx=5, pady=(5, 0), sticky="w")
+
         self.current_row += 1
 
     def _delete_layer(self):
@@ -730,14 +748,6 @@ class TrainFrame(ctk.CTkFrame):
 
     def _start_training(self):
         """Run training loop in a separate thread"""
-        if not self.layers:
-            self._update_display(self.loss_display, "Error: Add layers first!")
-            return
-
-        # Clear display areas before starting
-        self.epochs_display.delete("1.0", "end")
-        self.loss_display.delete("1.0", "end")
-        self.accuracy_display.delete("1.0", "end")
 
         training_thread = threading.Thread(target=self._training_loop)
         training_thread.daemon = True
@@ -765,6 +775,11 @@ class TrainFrame(ctk.CTkFrame):
             criterion = nn.CrossEntropyLoss()
 
             self.training_status = True
+
+            # Clear training history
+            self.loss_history = []
+            self.accuracy_history = []
+            self.epoch_history = []
 
             # Training loop
             for epoch in range(hyperparams["epochs"]):
@@ -802,12 +817,18 @@ class TrainFrame(ctk.CTkFrame):
                 self.current_loss = total_loss / len(train_loader)
                 self.current_accuracy = 100 * correct / total
 
-                # Update display using thread-safe method
-                self._update_display(self.epochs_display, f"Epoch: {self.current_epoch}/{hyperparams['epochs']}")
-                self._update_display(self.loss_display, f"Loss: {self.current_loss:.4f}")
-                self._update_display(self.accuracy_display, f"Accuracy: {self.current_accuracy:.2f}%")
+                self.epoch_history.append(self.current_epoch)
+                self.loss_history.append(self.current_loss)
+                self.accuracy_history.append(self.current_accuracy)
+
+                self.after(0, self._update_plots)
+
+                print(f"Epoch {self.current_epoch}: Loss = {self.current_loss:.4f}, Accuracy = {self.current_accuracy:.2f}%")
 
             self.training_status = False
+
+            self.current_model = model
+            self.current_model.eval()
 
         except Exception as e:
             import traceback
@@ -872,22 +893,76 @@ class TrainFrame(ctk.CTkFrame):
         self.training_status = False
 
     def setup_plot(self):
+        """Setup matplotlib plots for training visualization"""
+
         self.plot_frame = ctk.CTkFrame(self)
         self.plot_frame.grid(
             row=0, column=3, padx=10, pady=10, sticky="nsew", rowspan=self.current_row
         )
 
-        self.plot_label = ctk.CTkLabel(self.plot_frame, text="Model Performance")
-        self.plot_label.grid(row=0, column=0, padx=10, pady=10)
+        self.plot_frame.grid_rowconfigure(1, weight=1)
+        self.plot_frame.grid_columnconfigure(0, weight=1)
 
-        self.epochs_display = ctk.CTkTextbox(self.plot_frame, height=50)
-        self.epochs_display.grid(row=1, column=0, padx=10, pady=10)
+        # Title label
+        self.plot_label = ctk.CTkLabel(
+            self.plot_frame,
+            text="Training Progress",
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        self.plot_label.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        self.loss_display = ctk.CTkTextbox(self.plot_frame, height=50)
-        self.loss_display.grid(row=2, column=0, padx=10, pady=10)
+        # Create matplotlib figure
+        plt.style.use('dark_background')
+        self.fig = Figure(figsize=(6,8), dpi=100, facecolor='#1a1a1a')
 
-        self.accuracy_display = ctk.CTkTextbox(self.plot_frame, height=50)
-        self.accuracy_display.grid(row=3, column=0, padx=10, pady=10)
+        # Create subplots for loss and accuracy
+        self.ax_loss = self.fig.add_subplot(211)
+        self.ax_accuracy = self.fig.add_subplot(212)
+
+        # Loss plot styling
+        self.ax_loss.set_facecolor('#1a1a1a')
+        self.ax_loss.set_xlabel('Epoch', color='white')
+        self.ax_loss.set_ylabel('Loss', color='white')
+        self.ax_loss.set_title('Training Loss', color='white',fontsize=12, pad=10)
+        self.ax_loss.grid(True, alpha=0.3, linestyle='--')
+        self.ax_loss.tick_params(colors='white')
+
+        # Accuracy plot styling
+        self.ax_accuracy.set_facecolor('#1a1a1a')
+        self.ax_accuracy.set_xlabel('Epoch', color='white')
+        self.ax_accuracy.set_ylabel('Accuracy', color='white')
+        self.ax_accuracy.set_title('Training Accuracy', color='white',fontsize=12, pad=10)
+        self.ax_accuracy.grid(True, alpha=0.3, linestyle='--')
+        self.ax_accuracy.tick_params(colors='white')
+
+        self.fig.tight_layout(pad=3)
+
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+
+        self.loss_line, = self.ax_loss.plot([], [], color='red', linewidth=2, label='Loss')
+        self.accuracy_line, = self.ax_accuracy.plot([], [], color='green', linewidth=2, label='Accuracy')
+
+        self.ax_loss.legend(loc='upper right')
+        self.ax_accuracy.legend(loc='lower right')
+
+    def _update_plots(self):
+        """Update training plots with new data"""
+
+        # Loss plot
+        self.loss_line.set_data(self.epoch_history, self.loss_history)
+        self.ax_loss.relim()
+        self.ax_loss.autoscale_view()
+
+        # Accuracy plot
+        self.accuracy_line.set_data(self.epoch_history, self.accuracy_history)
+        self.ax_accuracy.relim()
+        self.ax_accuracy.autoscale_view()
+
+        # Redraw canvas
+        self.canvas.draw()
+        self.canvas.flush_events()
 
     def setup_bottom_buttons(self):
         self.bottom_button_frame = ctk.CTkFrame(self)
