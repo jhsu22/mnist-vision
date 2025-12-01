@@ -40,9 +40,10 @@ class TrainFrame(ctk.CTkFrame):
         self.last_saved_layers = None       # For resetting
 
         # Initialize plot tracking variables
+        self.update_interval = 50
         self.loss_history = []
         self.accuracy_history = []
-        self.epoch_history = []
+        self.step_history = []
 
         # Create models directory
         os.makedirs(Paths.SAVED_MODELS_DIR, exist_ok=True)
@@ -62,6 +63,7 @@ class TrainFrame(ctk.CTkFrame):
         # Create bottom buttons
         self.setup_bottom_buttons()
 
+        # Refresh model list
         self._refresh_model_list()
 
     def _get_toplevel(self):
@@ -94,8 +96,10 @@ class TrainFrame(ctk.CTkFrame):
 
         if self.current_model_name and self.current_model_name in all_models:
             self.model_selection.set(self.current_model_name)
-        else:
+        elif all_models:
             self.model_selection.set(all_models[0])
+        else:
+            self.model_selection.set("No models found")
 
     def _new_model(self):
         if self.layers and self.current_model is not None:
@@ -133,7 +137,7 @@ class TrainFrame(ctk.CTkFrame):
         # Clear plot history
         self.loss_history = []
         self.accuracy_history = []
-        self.epoch_history = []
+        self.step_history = []
         self._update_plots()
 
     def _save_model(self):
@@ -195,7 +199,7 @@ class TrainFrame(ctk.CTkFrame):
             },
             'loss_history': self.loss_history or [],
             'accuracy_history': self.accuracy_history or [],
-            'epoch_history': self.epoch_history or []
+            'step_history': self.step_history or []
         }
 
         if self.current_model is not None:
@@ -278,7 +282,7 @@ class TrainFrame(ctk.CTkFrame):
         # Clear plot history
         self.loss_history = save_data.get('loss_history', [])
         self.accuracy_history = save_data.get('accuracy_history', [])
-        self.epoch_history = save_data.get('epoch_history', [])
+        self.step_history = save_data.get('step_history', [])
         self._update_plots()
 
         _ = CTkMessagebox(
@@ -754,7 +758,7 @@ class TrainFrame(ctk.CTkFrame):
         training_thread.start()
 
     def _training_loop(self):
-        """Training loop for ML model"""
+        """Training loop for ML model with per-batch updates"""
         try:
             # Build model
             model, optimizer, hyperparams = self._build_model()
@@ -776,22 +780,31 @@ class TrainFrame(ctk.CTkFrame):
 
             self.training_status = True
 
-            # Clear training history
+            # Clear history before training
             self.loss_history = []
             self.accuracy_history = []
-            self.epoch_history = []
+            self.step_history = []
+
+            # Track running metrics within update window
+            running_loss = 0.0
+            running_correct = 0
+            running_total = 0
+            global_batch_count = 0  # Total batches across all epochs
+
+            num_batches = len(train_loader)
+            total_epochs = hyperparams["epochs"]
 
             # Training loop
-            for epoch in range(hyperparams["epochs"]):
+            for epoch in range(total_epochs):
                 if not self.training_status:
                     break
 
                 model.train()
-                total_loss = 0
-                correct = 0
-                total = 0
+                epoch_loss = 0.0
+                epoch_correct = 0
+                epoch_total = 0
 
-                for batch_x, batch_y in train_loader:
+                for batch_idx, (batch_x, batch_y) in enumerate(train_loader):
                     if not self.training_status:
                         break
 
@@ -806,35 +819,75 @@ class TrainFrame(ctk.CTkFrame):
                     loss.backward()
                     optimizer.step()
 
-                    # Track training metrics
-                    total_loss += loss.item()
+                    # Track metrics
+                    batch_loss = loss.item()
                     _, predicted = torch.max(outputs.data, 1)
-                    total += batch_y.size(0)
-                    correct += (predicted == batch_y).sum().item()
+                    batch_size = batch_y.size(0)
+                    batch_correct = (predicted == batch_y).sum().item()
 
-                # Update metrics after each epoch
-                self.current_epoch = epoch + 1
-                self.current_loss = total_loss / len(train_loader)
-                self.current_accuracy = 100 * correct / total
+                    # Accumulate for running average
+                    running_loss += batch_loss
+                    running_correct += batch_correct
+                    running_total += batch_size
 
-                self.epoch_history.append(self.current_epoch)
-                self.loss_history.append(self.current_loss)
-                self.accuracy_history.append(self.current_accuracy)
+                    # Accumulate for epoch statistics
+                    epoch_loss += batch_loss
+                    epoch_correct += batch_correct
+                    epoch_total += batch_size
 
-                self.after(0, self._update_plots)
+                    global_batch_count += 1
 
-                print(f"Epoch {self.current_epoch}: Loss = {self.current_loss:.4f}, Accuracy = {self.current_accuracy:.2f}%")
+                    # Update plot every N batches
+                    if global_batch_count % self.update_interval == 0:
+                        # Calculate averages over the update window
+                        avg_loss = running_loss / self.update_interval
+                        avg_accuracy = 100.0 * running_correct / running_total
+
+                        # Calculate fractional epoch (e.g., 1.5 means halfway through epoch 2)
+                        fractional_epoch = epoch + (batch_idx + 1) / num_batches
+
+                        # Store in history
+                        self.step_history.append(fractional_epoch)
+                        self.loss_history.append(avg_loss)
+                        self.accuracy_history.append(avg_accuracy)
+
+                        # Update plots on main thread
+                        self.after(0, self._update_plots)
+
+                        # Print progress
+                        print(f"Epoch {epoch+1}/{total_epochs} "
+                              f"[Batch {batch_idx+1}/{num_batches}] - "
+                              f"Loss: {avg_loss:.4f}, "
+                              f"Accuracy: {avg_accuracy:.2f}%")
+
+                        # Reset running metrics
+                        running_loss = 0.0
+                        running_correct = 0
+                        running_total = 0
+
+                # Print epoch summary
+                epoch_avg_loss = epoch_loss / num_batches
+                epoch_avg_accuracy = 100.0 * epoch_correct / epoch_total
+                print(f"\n{'='*60}")
+                print(f"EPOCH {epoch+1}/{total_epochs} SUMMARY:")
+                print(f"  Average Loss: {epoch_avg_loss:.4f}")
+                print(f"  Average Accuracy: {epoch_avg_accuracy:.2f}%")
+                print(f"{'='*60}\n")
 
             self.training_status = False
 
+            # Store the trained model
             self.current_model = model
             self.current_model.eval()
+
+            print("\n" + "="*60)
+            print("TRAINING COMPLETE!")
+            print("="*60 + "\n")
 
         except Exception as e:
             import traceback
             error_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
-            self._update_display(self.loss_display, f"Error: {str(e)}")
             self.training_status = False
 
     def _get_data_loader(self, batch_size):
@@ -924,39 +977,45 @@ class TrainFrame(ctk.CTkFrame):
         self.ax_loss.set_xlabel('Epoch', color='white')
         self.ax_loss.set_ylabel('Loss', color='white')
         self.ax_loss.set_title('Training Loss', color='white',fontsize=12, pad=10)
-        self.ax_loss.grid(True, alpha=0.3, linestyle='--')
+        self.ax_loss.grid(True, alpha=0.8, linestyle='--')
         self.ax_loss.tick_params(colors='white')
 
         # Accuracy plot styling
         self.ax_accuracy.set_facecolor('#1a1a1a')
         self.ax_accuracy.set_xlabel('Epoch', color='white')
-        self.ax_accuracy.set_ylabel('Accuracy', color='white')
+        self.ax_accuracy.set_ylabel('Accuracy (%)', color='white')
         self.ax_accuracy.set_title('Training Accuracy', color='white',fontsize=12, pad=10)
-        self.ax_accuracy.grid(True, alpha=0.3, linestyle='--')
+        self.ax_accuracy.grid(True, alpha=0.8, linestyle='--')
         self.ax_accuracy.tick_params(colors='white')
 
         self.fig.tight_layout(pad=3)
 
+        # Create tkinter object
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.draw()
         self.canvas.get_tk_widget().grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
 
+        # Initialize plots
         self.loss_line, = self.ax_loss.plot([], [], color='red', linewidth=2, label='Loss')
         self.accuracy_line, = self.ax_accuracy.plot([], [], color='green', linewidth=2, label='Accuracy')
 
         self.ax_loss.legend(loc='upper right')
         self.ax_accuracy.legend(loc='lower right')
 
+        # Data output textbox
+        self.output_textbox = ctk.CTkTextbox(self.plot_frame, width=200, height=200)
+        self.output_textbox.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
+
     def _update_plots(self):
         """Update training plots with new data"""
 
         # Loss plot
-        self.loss_line.set_data(self.epoch_history, self.loss_history)
+        self.loss_line.set_data(self.step_history, self.loss_history)
         self.ax_loss.relim()
         self.ax_loss.autoscale_view()
 
         # Accuracy plot
-        self.accuracy_line.set_data(self.epoch_history, self.accuracy_history)
+        self.accuracy_line.set_data(self.step_history, self.accuracy_history)
         self.ax_accuracy.relim()
         self.ax_accuracy.autoscale_view()
 
