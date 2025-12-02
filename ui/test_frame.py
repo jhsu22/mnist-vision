@@ -416,13 +416,16 @@ class TestFrame(ctk.CTkFrame):
             color="white",
             fontfamily="monospace",
             fontweight="bold",
+            fontsize=10,
+            pad=10,
         )
         self.ax_confusion_matrix.set_xlabel(
-            "Predicted", color="white", fontfamily="monospace"
+            "Predicted", color="white", fontfamily="monospace", fontsize=10
         )
         self.ax_confusion_matrix.set_ylabel(
-            "Actual", color="white", fontfamily="monospace"
+            "Actual", color="white", fontfamily="monospace", fontsize=10
         )
+        self.ax_confusion_matrix.tick_params(colors="white", labelsize=9)
         self.ax_confusion_matrix.text(
             0.5,
             0.5,
@@ -441,11 +444,21 @@ class TestFrame(ctk.CTkFrame):
             color="white",
             fontfamily="monospace",
             fontweight="bold",
+            fontsize=10,
+            pad=10,
         )
-        self.ax_accuracy.set_xlabel("Digit", color="white", fontfamily="monospace")
+        self.ax_accuracy.set_xlabel(
+            "Digit", color="white", fontfamily="monospace", fontsize=10
+        )
         self.ax_accuracy.set_ylabel(
-            "Accuracy (%)", color="white", fontfamily="monospace"
+            "Accuracy (%)", color="white", fontfamily="monospace", fontsize=10
         )
+        self.ax_accuracy.tick_params(colors="white", labelsize=9)
+        self.ax_accuracy.grid(True, alpha=0.2, linestyle="-", color="gray")
+        self.ax_accuracy.spines["top"].set_visible(False)
+        self.ax_accuracy.spines["right"].set_visible(False)
+        self.ax_accuracy.spines["left"].set_color("white")
+        self.ax_accuracy.spines["bottom"].set_color("white")
         self.ax_accuracy.set_ylim(0, 100)
         self.ax_accuracy.text(
             0.5,
@@ -489,22 +502,22 @@ class TestFrame(ctk.CTkFrame):
             self.confusion_matrix, cmap="Reds", aspect="auto"
         )
 
-        # Add colorbar (simplified)
+        # Add colorbar
         cbar = self.confusion_matrix_fig.colorbar(im, ax=self.ax_confusion_matrix)
-        cbar.ax.tick_params(labelsize=10, colors="white")
+        cbar.ax.tick_params(labelsize=9, colors="white")
 
         # Set ticks and labels
         self.ax_confusion_matrix.set_xticks(np.arange(10))
         self.ax_confusion_matrix.set_xticklabels(
             ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
             fontfamily="monospace",
-            fontsize=11,
+            fontsize=9,
         )
         self.ax_confusion_matrix.set_yticks(np.arange(10))
         self.ax_confusion_matrix.set_yticklabels(
             ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
             fontfamily="monospace",
-            fontsize=11,
+            fontsize=9,
         )
 
         # Styling
@@ -513,15 +526,15 @@ class TestFrame(ctk.CTkFrame):
             "Confusion Matrix",
             color="white",
             fontfamily="monospace",
-            fontsize=16,
+            fontsize=10,
             fontweight="bold",
-            pad=15,
+            pad=10,
         )
         self.ax_confusion_matrix.set_xlabel(
-            "Predicted", color="white", fontfamily="monospace", fontsize=12
+            "Predicted", color="white", fontfamily="monospace", fontsize=10
         )
         self.ax_confusion_matrix.set_ylabel(
-            "Actual", color="white", fontfamily="monospace", fontsize=12
+            "Actual", color="white", fontfamily="monospace", fontsize=10
         )
         self.ax_confusion_matrix.tick_params(colors="white")
 
@@ -530,7 +543,6 @@ class TestFrame(ctk.CTkFrame):
         # --- ACCURACY BAR CHART ---
         digits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-        # Single consistent red color
         bars = self.ax_accuracy.bar(
             digits,
             self.class_accuracies,
@@ -542,38 +554,38 @@ class TestFrame(ctk.CTkFrame):
         # Styling
         self.ax_accuracy.set_facecolor("#1a1a1a")
         self.ax_accuracy.set_xlabel(
-            "Digit", color="white", fontfamily="monospace", fontsize=12
+            "Digit", color="white", fontfamily="monospace", fontsize=10
         )
         self.ax_accuracy.set_ylabel(
-            "Accuracy (%)", color="white", fontfamily="monospace", fontsize=12
+            "Accuracy (%)", color="white", fontfamily="monospace", fontsize=10
         )
         self.ax_accuracy.set_title(
             "Per-Class Accuracy",
             color="white",
             fontfamily="monospace",
-            fontsize=16,
+            fontsize=10,
             fontweight="bold",
-            pad=15,
+            pad=10,
         )
         self.ax_accuracy.set_ylim(0, 105)  # Slight padding at top
         self.ax_accuracy.set_xticks(digits)
         self.ax_accuracy.set_xticklabels(
             ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
             fontfamily="monospace",
-            fontsize=11,
+            fontsize=9,
         )
-        self.ax_accuracy.tick_params(colors="white", labelsize=10)
+        self.ax_accuracy.tick_params(colors="white", labelsize=9)
 
-        # Simplified grid - only horizontal lines
+        # only horizontal lines
         self.ax_accuracy.grid(axis="y", alpha=0.2, linestyle="-", color="gray")
 
-        # Remove top and right spines for cleaner look
+        # Remove top and right spines
         self.ax_accuracy.spines["top"].set_visible(False)
         self.ax_accuracy.spines["right"].set_visible(False)
         self.ax_accuracy.spines["left"].set_color("white")
         self.ax_accuracy.spines["bottom"].set_color("white")
 
-        # Add percentage labels on top of bars (simplified)
+        # Add percentage labels on top of bars
         for i, (digit, acc) in enumerate(zip(digits, self.class_accuracies)):
             self.ax_accuracy.text(
                 digit,
@@ -583,7 +595,7 @@ class TestFrame(ctk.CTkFrame):
                 va="bottom",
                 color="white",
                 fontfamily="monospace",
-                fontsize=9,
+                fontsize=8,
             )
 
         self.accuracy_fig.tight_layout()

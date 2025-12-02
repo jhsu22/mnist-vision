@@ -443,7 +443,7 @@ class TrainFrame(ctk.CTkFrame):
             )
 
             if not param_template:
-                # No parameters for this layer type (e.g., Flatten)
+                # No parameters for this layer type
                 msg = ctk.CTkLabel(self.param_panel, text="No configurable parameters")
                 msg.grid(row=1, column=0, columnspan=2, padx=5, pady=10)
                 return
@@ -451,7 +451,7 @@ class TrainFrame(ctk.CTkFrame):
             row_number = 1
 
             for param_name, param_info in param_template.items():
-                # Get current value from the layer (use default if not set)
+                # Get current value from the layer
                 param_value = current_layer["params"].get(
                     param_name, param_info["default"]
                 )
@@ -694,7 +694,7 @@ class TrainFrame(ctk.CTkFrame):
             row=self.current_row, column=0, columnspan=2, padx=15, pady=10, sticky="ew"
         )
 
-        # Configure grid - 2 columns
+        # Configure grid
         self.hyperparameters_frame.grid_columnconfigure(0, weight=1)
         self.hyperparameters_frame.grid_columnconfigure(1, weight=1)
 
@@ -706,7 +706,6 @@ class TrainFrame(ctk.CTkFrame):
         )
         title.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 15), sticky="w")
 
-        # Row 1: Learning Rate | Epochs
         self.learning_rate_label = ctk.CTkLabel(
             self.hyperparameters_frame, text="Learning Rate"
         )
@@ -727,7 +726,6 @@ class TrainFrame(ctk.CTkFrame):
         )
         self.epochs_entry.grid(row=2, column=1, padx=10, pady=(0, 10), sticky="ew")
 
-        # Row 2: Batch Size | Optimizer
         self.batch_size_label = ctk.CTkLabel(
             self.hyperparameters_frame, text="Batch Size"
         )
@@ -799,7 +797,6 @@ class TrainFrame(ctk.CTkFrame):
             model.summary()
             print("=" * 60 + "\n")
 
-            # Set device (use GPU if available)
             device = torch.device("cpu")
             model.to(device)
 
@@ -874,7 +871,7 @@ class TrainFrame(ctk.CTkFrame):
                         avg_loss = running_loss / self.update_interval
                         avg_accuracy = 100.0 * running_correct / running_total
 
-                        # Calculate fractional epoch (e.g., 1.5 means halfway through epoch 2)
+                        # Calculate fractional epoch
                         fractional_epoch = epoch + (batch_idx + 1) / num_batches
 
                         # Store in history

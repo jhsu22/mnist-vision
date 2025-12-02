@@ -7,6 +7,7 @@ import customtkinter as ctk
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageTk
+import PIL.ImageOps
 import torch
 import torch.nn as nn
 from CTkMessagebox import CTkMessagebox
@@ -202,12 +203,23 @@ class DemoFrame(ctk.CTkFrame):
             color="white",
             fontfamily="monospace",
             fontweight="bold",
+            fontsize=10,
+            pad=10,
         )
-        self.ax_confidence.set_xlabel("Digit", color="white", fontfamily="monospace")
+        self.ax_confidence.set_xlabel(
+            "Digit", color="white", fontfamily="monospace", fontsize=10
+        )
         self.ax_confidence.set_ylabel(
-            "Confidence (%)", color="white", fontfamily="monospace"
+            "Confidence (%)", color="white", fontfamily="monospace", fontsize=10
         )
         self.ax_confidence.set_ylim(0, 100)
+        self.ax_confidence.tick_params(colors="white", labelsize=9)
+        self.ax_confidence.grid(True, alpha=0.2, linestyle="-", color="gray")
+        self.ax_confidence.spines["top"].set_visible(False)
+        self.ax_confidence.spines["right"].set_visible(False)
+        self.ax_confidence.spines["left"].set_color("white")
+        self.ax_confidence.spines["bottom"].set_color("white")
+
         self.ax_confidence.text(
             0.5,
             0.5,
@@ -425,7 +437,7 @@ class DemoFrame(ctk.CTkFrame):
 
             # Loop through image directory
             for file in os.listdir(self.directory):
-                self._update_results(f"Processing image {file}... in photo directory...\n")
+                self._update_results(f"Processing image {file} in photo directory...\n")
 
                 # Get only image files
                 if file.endswith(".jpg") or file.endswith(".png"):
@@ -512,6 +524,9 @@ class DemoFrame(ctk.CTkFrame):
         # Get and display image from results
         img = result['image']
 
+        # Get inverse image (black on white bg)
+        img = PIL.ImageOps.invert(img)
+
         # Resize image to fit canvas
         img = img.resize((364, 364))
 
@@ -534,11 +549,49 @@ class DemoFrame(ctk.CTkFrame):
 
         # Write to confidence plot
         self.ax_confidence.clear()
-        self.ax_confidence.bar(np.arange(10), result['confidences'], color='blue')
-        self.ax_confidence.set_xticks(np.arange(10))
-        self.ax_confidence.set_xticklabels(np.arange(10))
+
+        digits = np.arange(10)
+        self.ax_confidence.bar(
+            digits,
+            result['confidences'],
+            color='#E74C3C',
+            edgecolor="white",
+            linewidth=0.5
+        )
+
+        # Styling
+        self.ax_confidence.set_facecolor("#1a1a1a")
+        self.ax_confidence.set_title(
+            "Model Confidence",
+            color="white",
+            fontfamily="monospace",
+            fontsize=10,
+            fontweight="bold",
+            pad=10,
+        )
+        self.ax_confidence.set_xlabel(
+            "Digit", color="white", fontfamily="monospace", fontsize=10
+        )
+        self.ax_confidence.set_ylabel(
+            "Confidence (%)", color="white", fontfamily="monospace", fontsize=10
+        )
+
         self.ax_confidence.set_ylim(0, 100)
-        self.ax_confidence.set_title('Confidence')
-        self.ax_confidence.set_xlabel('Digit')
-        self.ax_confidence.set_ylabel('Confidence (%)')
+        self.ax_confidence.set_xticks(digits)
+        self.ax_confidence.set_xticklabels(
+            ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+            fontfamily="monospace",
+            fontsize=9,
+        )
+        self.ax_confidence.tick_params(colors="white", labelsize=9)
+
+        # only horizontal lines
+        self.ax_confidence.grid(axis="y", alpha=0.2, linestyle="-", color="gray")
+
+        # Remove top and right spines
+        self.ax_confidence.spines["top"].set_visible(False)
+        self.ax_confidence.spines["right"].set_visible(False)
+        self.ax_confidence.spines["left"].set_color("white")
+        self.ax_confidence.spines["bottom"].set_color("white")
+
         self.ax_confidence.figure.canvas.draw()
