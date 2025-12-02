@@ -6,6 +6,7 @@ import customtkinter as ctk
 
 from config import App, initialize_fonts
 from ui.container_frame import BaseFrame
+from ui.demo_frame import DemoFrame
 from ui.settings_frame import SettingsFrame
 from ui.test_frame import TestFrame
 from ui.train_frame import TrainFrame
@@ -38,6 +39,9 @@ class MnistPlayground(ctk.CTk):
 
         self.test_ui = TestFrame(content_frame)
         self.test_ui.grid(row=0, column=0, sticky="nsew")
+
+        self.demo_ui = DemoFrame(content_frame)
+        self.demo_ui.grid(row=0, column=0, sticky="nsew")
 
         self.settings_ui = SettingsFrame(content_frame)
         self.settings_ui.grid(row=0, column=0, sticky="nsew")

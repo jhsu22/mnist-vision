@@ -1,18 +1,16 @@
-import customtkinter as ctk
+import os
 import threading
 
-from CTkMessagebox import CTkMessagebox
-
+import customtkinter as ctk
 import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from CTkMessagebox import CTkMessagebox
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from config import LAYER_PARAMS, App, Paths
 from core.model import BaseModel, get_layer_output_shapes
-import os
-
-import torch
-import torch.nn as nn
 
 
 class TrainFrame(ctk.CTkFrame):
@@ -39,9 +37,9 @@ class TrainFrame(ctk.CTkFrame):
         self.current_accuracy = 0
 
         # Track current model
-        self.current_model = None           # Actual PyTorch model
-        self.current_model_name = None      # Name of the current model
-        self.last_saved_layers = None       # For resetting
+        self.current_model = None  # Actual PyTorch model
+        self.current_model_name = None  # Name of the current model
+        self.last_saved_layers = None  # For resetting
 
         # Initialize plot tracking variables
         self.update_interval = 50
@@ -113,7 +111,7 @@ class TrainFrame(ctk.CTkFrame):
                 message="Are you sure you want to create a new model?\nThis will discard your current model.",
                 icon="question",
                 option_1="No",
-                option_2="Yes"
+                option_2="Yes",
             )
             if msg.get() != "Yes":
                 return
@@ -151,19 +149,16 @@ class TrainFrame(ctk.CTkFrame):
                 master=self,
                 title="Save Model",
                 message="Your model has no layers. Add layers first.",
-                icon="warning"
+                icon="warning",
             )
             return
 
         # Get model name from dialog
-        dialog = ctk.CTkInputDialog(
-            text="Enter model name:",
-            title="Save Model"
-        )
+        dialog = ctk.CTkInputDialog(text="Enter model name:", title="Save Model")
         model_name = dialog.get_input()
 
         if not model_name:
-            return           # If user cancels dialog
+            return  # If user cancels dialog
 
         # Remove invalid characters
         model_name = "".join(c for c in model_name if c.isalnum() or c in "._- ")
@@ -174,7 +169,7 @@ class TrainFrame(ctk.CTkFrame):
                 master=self,
                 title="Save Model",
                 message="Invalid model name.",
-                icon="warning"
+                icon="warning",
             )
             return
 
@@ -187,27 +182,27 @@ class TrainFrame(ctk.CTkFrame):
                 message=f"Model '{model_name}' already exists. Overwrite?",
                 icon="question",
                 option_1="No",
-                option_2="Yes"
+                option_2="Yes",
             )
             if msg.get() != "Yes":
                 return
 
         # Prepare model for saving
         save_data = {
-            'layer_configs': self.layers,
-            'hyperparameters': {
-                'learning_rate': self.learning_rate_entry.get() or "0.001",
-                'epochs': self.epochs_entry.get() or "10",
-                'batch_size': self.batch_size_entry.get() or "32",
-                'optimizer': self.optimizer_entry.get() or "Adam"
+            "layer_configs": self.layers,
+            "hyperparameters": {
+                "learning_rate": self.learning_rate_entry.get() or "0.001",
+                "epochs": self.epochs_entry.get() or "10",
+                "batch_size": self.batch_size_entry.get() or "32",
+                "optimizer": self.optimizer_entry.get() or "Adam",
             },
-            'loss_history': self.loss_history or [],
-            'accuracy_history': self.accuracy_history or [],
-            'step_history': self.step_history or []
+            "loss_history": self.loss_history or [],
+            "accuracy_history": self.accuracy_history or [],
+            "step_history": self.step_history or [],
         }
 
         if self.current_model is not None:
-            save_data['model_state_dict'] = self.current_model.state_dict()
+            save_data["model_state_dict"] = self.current_model.state_dict()
 
         # Save model
         torch.save(save_data, file_path)
@@ -218,7 +213,7 @@ class TrainFrame(ctk.CTkFrame):
             master=self,
             title="Save Model",
             message=f"Model saved as '{model_name}.pth'",
-            icon="check"
+            icon="check",
         )
         self._refresh_model_list()
 
@@ -231,7 +226,7 @@ class TrainFrame(ctk.CTkFrame):
                 master=self,
                 title="Load Model",
                 message="No model selected.",
-                icon="warning"
+                icon="warning",
             )
             return
 
@@ -242,7 +237,7 @@ class TrainFrame(ctk.CTkFrame):
                 master=self,
                 title="Load Model",
                 message=f"Model '{model_name}' not found.",
-                icon="cancel"
+                icon="cancel",
             )
             return
 
@@ -250,27 +245,27 @@ class TrainFrame(ctk.CTkFrame):
         save_data = torch.load(file_path, weights_only=False)
 
         # Restore layer configuration
-        self.layers = save_data.get('layer_configs', [])
+        self.layers = save_data.get("layer_configs", [])
 
         # Get hyperparameters
-        hyperparams = save_data.get('hyperparameters', {})
+        hyperparams = save_data.get("hyperparameters", {})
 
         # Restore hyperparameters
         self.learning_rate_entry.delete(0, "end")
-        self.learning_rate_entry.insert(0, hyperparams.get('learning_rate', '0.001'))
+        self.learning_rate_entry.insert(0, hyperparams.get("learning_rate", "0.001"))
 
         self.epochs_entry.delete(0, "end")
-        self.epochs_entry.insert(0, hyperparams.get('epochs', '10'))
+        self.epochs_entry.insert(0, hyperparams.get("epochs", "10"))
 
         self.batch_size_entry.delete(0, "end")
-        self.batch_size_entry.insert(0, hyperparams.get('batch_size', '32'))
+        self.batch_size_entry.insert(0, hyperparams.get("batch_size", "32"))
 
-        self.optimizer_entry.set(hyperparams.get('optimizer', 'Adam'))
+        self.optimizer_entry.set(hyperparams.get("optimizer", "Adam"))
 
         # Rebuild model if the saved file has weights
-        if 'model_state_dict' in save_data and self.layers:
+        if "model_state_dict" in save_data and self.layers:
             self.current_model = BaseModel(self.layers)
-            self.current_model.load_state_dict(save_data['model_state_dict'])
+            self.current_model.load_state_dict(save_data["model_state_dict"])
             self.current_model.eval()
         else:
             self.current_model = None
@@ -284,16 +279,16 @@ class TrainFrame(ctk.CTkFrame):
         self._display_layer_params(None)
 
         # Clear plot history
-        self.loss_history = save_data.get('loss_history', [])
-        self.accuracy_history = save_data.get('accuracy_history', [])
-        self.step_history = save_data.get('step_history', [])
+        self.loss_history = save_data.get("loss_history", [])
+        self.accuracy_history = save_data.get("accuracy_history", [])
+        self.step_history = save_data.get("step_history", [])
         self._update_plots()
 
         _ = CTkMessagebox(
             master=self,
             title="Load Model",
             message=f"Model '{model_name}' loaded successfully.",
-            icon="check"
+            icon="check",
         )
 
     def _reset_model(self):
@@ -304,7 +299,7 @@ class TrainFrame(ctk.CTkFrame):
                 message="Reset to last saved state?\n(Current changes will be lost)",
                 icon="question",
                 option_1="No",
-                option_2="Yes"
+                option_2="Yes",
             )
             if msg.get() == "Yes":
                 self.layers = [dict(layer) for layer in self.last_saved_layers]
@@ -319,7 +314,7 @@ class TrainFrame(ctk.CTkFrame):
                 message="No saved state. Clear all layers?",
                 icon="question",
                 option_1="No",
-                option_2="Yes"
+                option_2="Yes",
             )
             if msg.get() == "Yes":
                 self._new_model()
@@ -377,7 +372,9 @@ class TrainFrame(ctk.CTkFrame):
             shape_text = ""
             if shape_idx < len(shapes):
                 # Skip auto-inserted flatten in shape display
-                while shape_idx < len(shapes) and "auto" in shapes[shape_idx][0].lower():
+                while (
+                    shape_idx < len(shapes) and "auto" in shapes[shape_idx][0].lower()
+                ):
                     shape_idx += 1
 
                 if shape_idx < len(shapes):
@@ -389,7 +386,9 @@ class TrainFrame(ctk.CTkFrame):
                     shape_idx += 1
 
                     # Skip activation shapes
-                    while shape_idx < len(shapes) and shapes[shape_idx][0].startswith("  └─"):
+                    while shape_idx < len(shapes) and shapes[shape_idx][0].startswith(
+                        "  └─"
+                    ):
                         shape_idx += 1
 
             label_text = f"{index + 1}. {layer_type}{shape_text}"
@@ -437,9 +436,11 @@ class TrainFrame(ctk.CTkFrame):
             header = ctk.CTkLabel(
                 self.param_panel,
                 text=f"{layer_type} Layer",
-                font=ctk.CTkFont(size=16, weight="bold")
+                font=ctk.CTkFont(size=16, weight="bold"),
             )
-            header.grid(row=0, column=0, columnspan=2, padx=5, pady=(10, 20), sticky="w")
+            header.grid(
+                row=0, column=0, columnspan=2, padx=5, pady=(10, 20), sticky="w"
+            )
 
             if not param_template:
                 # No parameters for this layer type (e.g., Flatten)
@@ -451,7 +452,9 @@ class TrainFrame(ctk.CTkFrame):
 
             for param_name, param_info in param_template.items():
                 # Get current value from the layer (use default if not set)
-                param_value = current_layer["params"].get(param_name, param_info["default"])
+                param_value = current_layer["params"].get(
+                    param_name, param_info["default"]
+                )
 
                 # Create label
                 param_label = ctk.CTkLabel(self.param_panel, text=param_info["label"])
@@ -466,19 +469,25 @@ class TrainFrame(ctk.CTkFrame):
 
                     param_entry.bind(
                         "<Return>",
-                        lambda event, pn=param_name: self._update_param(pn, event.widget.get()),
+                        lambda event, pn=param_name: self._update_param(
+                            pn, event.widget.get()
+                        ),
                     )
                     # Also update on focus out
                     param_entry.bind(
                         "<FocusOut>",
-                        lambda event, pn=param_name: self._update_param(pn, event.widget.get()),
+                        lambda event, pn=param_name: self._update_param(
+                            pn, event.widget.get()
+                        ),
                     )
 
                 elif param_info["type"] == "dropdown":
                     param_combo = ctk.CTkComboBox(
                         self.param_panel, values=param_info["options"]
                     )
-                    param_combo.set(param_value if param_value else param_info["options"][0])
+                    param_combo.set(
+                        param_value if param_value else param_info["options"][0]
+                    )
                     param_combo.grid(
                         row=row_number, column=1, padx=5, pady=10, sticky="ew"
                     )
@@ -545,13 +554,19 @@ class TrainFrame(ctk.CTkFrame):
         )
         self.new_model_button.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="w")
 
-        self.save_button = ctk.CTkButton(self.model_buttons_frame, text="Save Model", command=self._save_model)
+        self.save_button = ctk.CTkButton(
+            self.model_buttons_frame, text="Save Model", command=self._save_model
+        )
         self.save_button.grid(row=0, column=1, padx=5, pady=(5, 0), sticky="w")
 
-        self.reset_button = ctk.CTkButton(self.model_buttons_frame, text="Reset Model", command=self._reset_model)
+        self.reset_button = ctk.CTkButton(
+            self.model_buttons_frame, text="Reset Model", command=self._reset_model
+        )
         self.reset_button.grid(row=0, column=2, padx=5, pady=(5, 0), sticky="w")
 
-        self.load_button = ctk.CTkButton(self.model_buttons_frame, text="Load Model", command=self._load_model)
+        self.load_button = ctk.CTkButton(
+            self.model_buttons_frame, text="Load Model", command=self._load_model
+        )
         self.load_button.grid(row=0, column=3, padx=5, pady=(5, 0), sticky="w")
 
         self.current_row += 1
@@ -673,57 +688,65 @@ class TrainFrame(ctk.CTkFrame):
         self.grid_rowconfigure(layer_panels_start_row, weight=1)
 
     def setup_hyperparameters(self):
-        """Setup hyperparameter input boxes"""
+        """Setup hyperparameter input boxes in a compact 2x2 grid"""
         self.hyperparameters_frame = ctk.CTkFrame(self)
         self.hyperparameters_frame.grid(
             row=self.current_row, column=0, columnspan=2, padx=15, pady=10, sticky="ew"
         )
 
+        # Configure grid - 2 columns
+        self.hyperparameters_frame.grid_columnconfigure(0, weight=1)
         self.hyperparameters_frame.grid_columnconfigure(1, weight=1)
 
+        # Title
+        title = ctk.CTkLabel(
+            self.hyperparameters_frame,
+            text="Hyperparameters",
+            font=ctk.CTkFont(family="Albert Sans", size=14, weight="bold"),
+        )
+        title.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 15), sticky="w")
+
+        # Row 1: Learning Rate | Epochs
         self.learning_rate_label = ctk.CTkLabel(
             self.hyperparameters_frame, text="Learning Rate"
         )
-        self.learning_rate_label.grid(row=0, column=0, padx=0, pady=10, sticky="w")
+        self.learning_rate_label.grid(row=1, column=0, padx=10, pady=5, sticky="w")
 
         self.learning_rate_entry = ctk.CTkEntry(
             self.hyperparameters_frame, placeholder_text="0.001"
         )
-        self.learning_rate_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-
-        self.current_row += 1
+        self.learning_rate_entry.grid(
+            row=2, column=0, padx=10, pady=(0, 10), sticky="ew"
+        )
 
         self.epochs_label = ctk.CTkLabel(self.hyperparameters_frame, text="Epochs")
-        self.epochs_label.grid(row=1, column=0, padx=0, pady=10, sticky="w")
+        self.epochs_label.grid(row=1, column=1, padx=10, pady=5, sticky="w")
 
         self.epochs_entry = ctk.CTkEntry(
             self.hyperparameters_frame, placeholder_text="10"
         )
-        self.epochs_entry.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+        self.epochs_entry.grid(row=2, column=1, padx=10, pady=(0, 10), sticky="ew")
 
-        self.current_row += 1
-
+        # Row 2: Batch Size | Optimizer
         self.batch_size_label = ctk.CTkLabel(
             self.hyperparameters_frame, text="Batch Size"
         )
-        self.batch_size_label.grid(row=2, column=0, padx=0, pady=10, sticky="w")
+        self.batch_size_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
 
         self.batch_size_entry = ctk.CTkEntry(
             self.hyperparameters_frame, placeholder_text="32"
         )
-        self.batch_size_entry.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
-
-        self.current_row += 1
+        self.batch_size_entry.grid(row=4, column=0, padx=10, pady=(0, 10), sticky="ew")
 
         self.optimizer_label = ctk.CTkLabel(
             self.hyperparameters_frame, text="Optimizer"
         )
-        self.optimizer_label.grid(row=3, column=0, padx=0, pady=10, sticky="w")
+        self.optimizer_label.grid(row=3, column=1, padx=10, pady=5, sticky="w")
 
         self.optimizer_entry = ctk.CTkComboBox(
             self.hyperparameters_frame, values=App.OPTIMIZER_LIST
         )
-        self.optimizer_entry.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
+        self.optimizer_entry.grid(row=4, column=1, padx=10, pady=(0, 10), sticky="ew")
 
         self.current_row += 1
 
@@ -735,22 +758,26 @@ class TrainFrame(ctk.CTkFrame):
             "learning_rate": float(self.learning_rate_entry.get() or 0.001),
             "epochs": int(self.epochs_entry.get() or 10),
             "batch_size": int(self.batch_size_entry.get() or 32),
-            "optimizer": self.optimizer_entry.get() or "Adam"
+            "optimizer": self.optimizer_entry.get() or "Adam",
         }
 
         # Create model with auto-calculated sizes
         model = BaseModel(self.layers)
 
         # Create optimizer
-        optimizer = model.get_optimizer(hyperparams["optimizer"], hyperparams["learning_rate"])
+        optimizer = model.get_optimizer(
+            hyperparams["optimizer"], hyperparams["learning_rate"]
+        )
 
         return model, optimizer, hyperparams
 
     def _update_display(self, widget, text):
         """Helper method to update textbox displays from any thread"""
+
         def update():
             widget.delete("1.0", "end")
             widget.insert("1.0", text)
+
         # Schedule the update on the main thread
         self.after(0, update)
 
@@ -768,9 +795,9 @@ class TrainFrame(ctk.CTkFrame):
             model, optimizer, hyperparams = self._build_model()
 
             # Print model summary
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             model.summary()
-            print("="*60 + "\n")
+            print("=" * 60 + "\n")
 
             # Set device (use GPU if available)
             device = torch.device("cpu")
@@ -859,10 +886,12 @@ class TrainFrame(ctk.CTkFrame):
                         self.after(0, self._update_plots)
 
                         # Print progress
-                        print(f"Epoch {epoch+1}/{total_epochs} "
-                              f"[Batch {batch_idx+1}/{num_batches}] - "
-                              f"Loss: {avg_loss:.4f}, "
-                              f"Accuracy: {avg_accuracy:.2f}%")
+                        print(
+                            f"Epoch {epoch + 1}/{total_epochs} "
+                            f"[Batch {batch_idx + 1}/{num_batches}] - "
+                            f"Loss: {avg_loss:.4f}, "
+                            f"Accuracy: {avg_accuracy:.2f}%"
+                        )
 
                         # Reset running metrics
                         running_loss = 0.0
@@ -872,11 +901,11 @@ class TrainFrame(ctk.CTkFrame):
                 # Print epoch summary
                 epoch_avg_loss = epoch_loss / num_batches
                 epoch_avg_accuracy = 100.0 * epoch_correct / epoch_total
-                print(f"\n{'='*60}")
-                print(f"EPOCH {epoch+1}/{total_epochs} SUMMARY:")
+                print(f"\n{'=' * 60}")
+                print(f"EPOCH {epoch + 1}/{total_epochs} SUMMARY:")
                 print(f"  Average Loss: {epoch_avg_loss:.4f}")
                 print(f"  Average Accuracy: {epoch_avg_accuracy:.2f}%")
-                print(f"{'='*60}\n")
+                print(f"{'=' * 60}\n")
 
             self.training_status = False
 
@@ -884,65 +913,56 @@ class TrainFrame(ctk.CTkFrame):
             self.current_model = model
             self.current_model.eval()
 
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("TRAINING COMPLETE!")
-            print("="*60 + "\n")
+            print("=" * 60 + "\n")
 
         except Exception as e:
             import traceback
+
             error_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             self.training_status = False
 
     def _get_data_loader(self, batch_size):
         """Get training data"""
+        from torch.utils.data import DataLoader
         from torchvision import transforms
         from torchvision.datasets import ImageFolder
-        from torch.utils.data import DataLoader
 
-        transform = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
-            transforms.Resize((28, 28)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-        ])
-
-        train_dataset = ImageFolder(
-            root='mnist_dataset/training',
-            transform=transform
+        transform = transforms.Compose(
+            [
+                transforms.Grayscale(num_output_channels=1),
+                transforms.Resize((28, 28)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,)),
+            ]
         )
 
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=True
-        )
+        train_dataset = ImageFolder(root="mnist_dataset/training", transform=transform)
+
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
         return train_loader
 
     def _get_test_loader(self, batch_size):
         """Get the test data"""
+        from torch.utils.data import DataLoader
         from torchvision import transforms
         from torchvision.datasets import ImageFolder
-        from torch.utils.data import DataLoader
 
-        transform = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
-            transforms.Resize((28, 28)),
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-        ])
-
-        test_dataset = ImageFolder(
-            root=Paths.TEST_DIR,
-            transform=transform
+        transform = transforms.Compose(
+            [
+                transforms.Grayscale(num_output_channels=1),
+                transforms.Resize((28, 28)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,)),
+            ]
         )
 
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=batch_size,
-            shuffle=False
-        )
+        test_dataset = ImageFolder(root=Paths.TEST_DIR, transform=transform)
+
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
         return test_loader
 
@@ -965,52 +985,78 @@ class TrainFrame(ctk.CTkFrame):
         self.plot_label = ctk.CTkLabel(
             self.plot_frame,
             text="Training Progress",
-            font=ctk.CTkFont(family="Albert Sans", size=18, weight="bold")
+            font=ctk.CTkFont(family="monospace", size=14, weight="bold"),
         )
         self.plot_label.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
         # Create matplotlib figure
-        plt.style.use('dark_background')
-        self.fig = Figure(figsize=(6, 8), dpi=100, facecolor='#1a1a1a')
+        plt.style.use("dark_background")
+        self.fig = Figure(figsize=(6, 8), dpi=100, facecolor="#1a1a1a")
 
         # Create subplots for loss and accuracy
         self.ax_loss = self.fig.add_subplot(211)
         self.ax_accuracy = self.fig.add_subplot(212)
 
         # Loss plot styling
-        self.ax_loss.set_facecolor('#1a1a1a')
-        self.ax_loss.set_xlabel('Epoch', color='white', fontfamily='Albert Sans', fontsize=11)
-        self.ax_loss.set_ylabel('Loss', color='white', fontfamily='Albert Sans', fontsize=11)
-        self.ax_loss.set_title('Training Loss', color='white', fontfamily='Albert Sans', fontsize=14, fontweight='bold', pad=10)
-        self.ax_loss.grid(True, alpha=0.2, linestyle='-', color='gray')
-        self.ax_loss.tick_params(colors='white', labelsize=9)
-        self.ax_loss.spines['top'].set_visible(False)
-        self.ax_loss.spines['right'].set_visible(False)
-        self.ax_loss.spines['left'].set_color('white')
-        self.ax_loss.spines['bottom'].set_color('white')
+        self.ax_loss.set_facecolor("#1a1a1a")
+        self.ax_loss.set_xlabel(
+            "Epoch", color="white", fontfamily="monospace", fontsize=10
+        )
+        self.ax_loss.set_ylabel(
+            "Loss", color="white", fontfamily="monospace", fontsize=10
+        )
+        self.ax_loss.set_title(
+            "Training Loss",
+            color="white",
+            fontfamily="monospace",
+            fontsize=10,
+            fontweight="bold",
+            pad=10,
+        )
+        self.ax_loss.grid(True, alpha=0.2, linestyle="-", color="gray")
+        self.ax_loss.tick_params(colors="white", labelsize=9)
+        self.ax_loss.spines["top"].set_visible(False)
+        self.ax_loss.spines["right"].set_visible(False)
+        self.ax_loss.spines["left"].set_color("white")
+        self.ax_loss.spines["bottom"].set_color("white")
 
         # Accuracy plot styling
-        self.ax_accuracy.set_facecolor('#1a1a1a')
-        self.ax_accuracy.set_xlabel('Epoch', color='white', fontfamily='Albert Sans', fontsize=11)
-        self.ax_accuracy.set_ylabel('Accuracy (%)', color='white', fontfamily='Albert Sans', fontsize=11)
-        self.ax_accuracy.set_title('Training Accuracy', color='white', fontfamily='Albert Sans', fontsize=14, fontweight='bold', pad=10)
-        self.ax_accuracy.grid(True, alpha=0.2, linestyle='-', color='gray')
-        self.ax_accuracy.tick_params(colors='white', labelsize=9)
-        self.ax_accuracy.spines['top'].set_visible(False)
-        self.ax_accuracy.spines['right'].set_visible(False)
-        self.ax_accuracy.spines['left'].set_color('white')
-        self.ax_accuracy.spines['bottom'].set_color('white')
+        self.ax_accuracy.set_facecolor("#1a1a1a")
+        self.ax_accuracy.set_xlabel(
+            "Epoch", color="white", fontfamily="monospace", fontsize=10
+        )
+        self.ax_accuracy.set_ylabel(
+            "Accuracy (%)", color="white", fontfamily="monospace", fontsize=10
+        )
+        self.ax_accuracy.set_title(
+            "Training Accuracy",
+            color="white",
+            fontfamily="monospace",
+            fontsize=10,
+            fontweight="bold",
+            pad=10,
+        )
+        self.ax_accuracy.grid(True, alpha=0.2, linestyle="-", color="gray")
+        self.ax_accuracy.tick_params(colors="white", labelsize=9)
+        self.ax_accuracy.spines["top"].set_visible(False)
+        self.ax_accuracy.spines["right"].set_visible(False)
+        self.ax_accuracy.spines["left"].set_color("white")
+        self.ax_accuracy.spines["bottom"].set_color("white")
 
         self.fig.tight_layout(pad=3)
 
         # Create tkinter object
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas.draw()
-        self.canvas.get_tk_widget().grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        self.canvas.get_tk_widget().grid(
+            row=1, column=0, padx=10, pady=10, sticky="nsew"
+        )
 
         # Initialize plots with red color
-        self.loss_line, = self.ax_loss.plot([], [], color='#E74C3C', linewidth=2.5)
-        self.accuracy_line, = self.ax_accuracy.plot([], [], color='#E74C3C', linewidth=2.5)
+        (self.loss_line,) = self.ax_loss.plot([], [], color="#E74C3C", linewidth=2.5)
+        (self.accuracy_line,) = self.ax_accuracy.plot(
+            [], [], color="#E74C3C", linewidth=2.5
+        )
 
     def _update_plots(self):
         """Update training plots with new data"""
@@ -1040,8 +1086,12 @@ class TrainFrame(ctk.CTkFrame):
 
         self.current_row += 1
 
-        self.train_button = ctk.CTkButton(self.bottom_button_frame, text="Train Model", command=self._start_training)
+        self.train_button = ctk.CTkButton(
+            self.bottom_button_frame, text="Train Model", command=self._start_training
+        )
         self.train_button.pack(side="right", padx=10)
 
-        self.stop_button = ctk.CTkButton(self.bottom_button_frame, text="Stop Training", command=self._stop_training)
+        self.stop_button = ctk.CTkButton(
+            self.bottom_button_frame, text="Stop Training", command=self._stop_training
+        )
         self.stop_button.pack(side="right", padx=10)

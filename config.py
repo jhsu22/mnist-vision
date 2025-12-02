@@ -9,6 +9,7 @@ class Paths:
 
     SAVED_MODELS_DIR = "models"
     DATASET_DIR = "mnist_dataset"
+    DEMO_DIR = "assets/demo_example"
     TEST_DIR = "mnist_dataset/testing"
     THEME_PATH = "assets/themes/dark.json"
 
@@ -44,8 +45,8 @@ class Layers:
             "type": "dropdown",
             "default": "ReLU",
             "options": ["ReLU", "Sigmoid", "Tanh", "None"],
-            "label": "Activation"
-        }
+            "label": "Activation",
+        },
     }
 
     CONV2D = {
@@ -57,14 +58,14 @@ class Layers:
             "type": "dropdown",
             "default": "ReLU",
             "options": ["ReLU", "Sigmoid", "Tanh", "None"],
-            "label": "Activation"
-        }
+            "label": "Activation",
+        },
     }
 
     MAXPOOLING2D = {
         "kernel_size": {"type": "int", "default": 2, "label": "Kernel Size"},
         "stride": {"type": "int", "default": 2, "label": "Stride"},
-        "padding": {"type": "int", "default": 0, "label": "Padding"}
+        "padding": {"type": "int", "default": 0, "label": "Padding"},
     }
 
     FLATTEN = {}  # Flatten has no parameters
@@ -75,7 +76,7 @@ LAYER_PARAMS = {
     "Linear": Layers.LINEAR,
     "Conv2D": Layers.CONV2D,
     "MaxPooling2D": Layers.MAXPOOLING2D,
-    "Flatten": Layers.FLATTEN
+    "Flatten": Layers.FLATTEN,
 }
 
 

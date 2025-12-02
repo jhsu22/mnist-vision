@@ -37,6 +37,13 @@ class BaseFrame(ctk.CTkFrame):
         )
         self.test_button.pack(side="left", padx=10)
 
+        self.demo_button = ctk.CTkButton(
+            self.header_frame,
+            text="Demo Model",
+            command=lambda: parent.raise_frame(parent.demo_ui),
+        )
+        self.demo_button.pack(side="left", padx=10)
+
         self.settings_button = ctk.CTkButton(
             self.header_frame,
             text="Settings",
